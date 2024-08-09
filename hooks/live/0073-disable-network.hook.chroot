@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -e
+
+# Disable static network interface
+# Ref:
+#   /etc/init.d/networking
+#   /etc/default/networking
+#
+if [ -e /etc/default/networking ]
+then
+    /bin/sed --in-place -e 's/.*CONFIGURE_INTERFACES=.*/CONFIGURE_INTERFACES=no/' \
+        /etc/default/networking
+fi
+
+# Disable static bluetooth
+if [ -e /etc/default/bluetooth ]
+then
+    /bin/sed --in-place -e 's/.*BLUETOOTH_ENABLED=.*/BLUETOOTH_ENABLED=0/' \
+        /etc/default/bluetooth
+fi
+
+
+# Disable systemd network services
+
+# systemd unit configuration directory: /etc/systemd/system/
+config_dir='/etc/systemd/system'
+# systemd unit files directory: /lib/systemd/system/
+unit_dir='/lib/systemd/system'
+
+# network-manager postinst calls systemctl enable NetworkManager.service etc.
+# /var/cache/apt/archives/network-manager_1.30.0-2_amd64.deb:control.tar.xz
+# ifupdown postinst calls systemctl enable networking.service
+# /var/cache/apt/archives/ifupdown_0.8.36_amd64.deb:control.tar.xz
+network_services=(
+    "${unit_dir}"/NetworkManager.service
+    "${unit_dir}"/NetworkManager-dispatcher.service
+    "${unit_dir}"/NetworkManager-wait-online.service
+    "${unit_dir}"/networking.service
+    "${unit_dir}"/bluetooth.service )
+
+# systemctl disable NetworkManager.service is equivalent to removing the symlink in ${config_dir} that points to ${unit_dir}/NetworkManager.service
+# https://unix.stackexchange.com/questions/197670/how-to-disable-a-service-without-using-systemctl-disable
+
+# find symbolic links under ${config_dir}
+configs=($(/bin/find "${config_dir}" -type l))
+
+for config in "${configs[@]}"
+do
+    if [ -h "${config}" ]; then
+        dest=`/bin/file -hb "${config}" | /bin/sed -e 's/symbolic link to //'`
+        for service in "${network_services[@]}"
+        do
+            if [ "${dest}" == "${service}" ]; then
+                # remove the symbolic link ${config}
+                /bin/rm "${config}"
+            fi
+        done
+    fi
+done

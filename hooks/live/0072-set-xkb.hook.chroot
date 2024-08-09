@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -e
+
+# Edit
+if [ -e /etc/default/keyboard ]
+then
+    /bin/sed --in-place -e 's/XKBOPTIONS=""/XKBOPTIONS="ctrl:nocaps"/' \
+        /etc/default/keyboard
+else
+    /bin/cat << END_OF_TEXT > /etc/default/keyboard
+# KEYBOARD CONFIGURATION FILE
+
+# Consult the keyboard(5) manual page.
+
+XKBMODEL="pc105"
+XKBLAYOUT="us"
+XKBVARIANT=""
+XKBOPTIONS="ctrl:nocaps"
+
+BACKSPACE="guess"
+END_OF_TEXT
+fi

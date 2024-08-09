@@ -1,0 +1,110 @@
+# Defined globally
+
+# Linux system commands
+
+BASENAME_CMD='/usr/bin/basename'	# coreutils
+CAT_CMD='/bin/cat'	# coreutils
+CHOWN_CMD='/bin/chown'	# coreutils
+CUT_CMD='/usr/bin/cut'	# coreutils
+DATE_CMD='/bin/date'	# coreutils
+DIRNAME_CMD='/usr/bin/dirname'	# coreutils
+DD_CMD='/bin/dd'	# coreutils
+DF_CMD='/bin/df'	# coreutils
+E2FSCK_CMD='/sbin/e2fsck'	# e2fsprogs
+ECHO_CMD='/bin/echo'	# coreutils
+KILL_CMD='/bin/kill'	# procps
+LOSETUP_CMD='/sbin/losetup'	# mount
+LSBLK_CMD='/bin/lsblk'	# util-linux
+MKDIR_CMD='/bin/mkdir'	# coreutils
+MKFS_EXT2_CMD='/sbin/mkfs.ext2'	# e2fsprogs
+MKTEMP_CMD='/bin/mktemp'	# coreutils
+MODPROBE_CMD='/sbin/modprobe'	# kmod
+MOUNT_CMD='/bin/mount'	# mount
+MOUNTPOINT_CMD='/bin/mountpoint'	# util-linux
+MV_CMD='/bin/mv'	# coreutils
+REALPATH_CMD='/usr/bin/realpath'	# coreutils
+RM_CMD='/bin/rm'	# coreutils
+SHA256SUM_CMD='/usr/bin/sha256sum'	# coreutils
+SLEEP_CMD='/bin/sleep'	# coreutils
+SORT_CMD='/usr/bin/sort'	# coreutils
+STAT_CMD='/usr/bin/stat'	# coreutils
+SUDO_CMD='/usr/bin/sudo'	# sudo
+TEE_CMD='/usr/bin/tee'	# coreutils
+TR_CMD='/usr/bin/tr'	# coreutils
+UMOUNT_CMD='/bin/umount'	# mount
+WC_CMD='/usr/bin/wc'	# coreutils
+WHICH_CMD='/bin/which'
+
+# application commands
+
+ASKPASS_CMD='/usr/libexec/ssh-askpass/x11-ssh-askpass'	# ssh-askpass
+CRYPTSETUP_CMD='/sbin/cryptsetup'	# cryptsetup-bin
+FIND_CMD='/usr/bin/find'	# findutils
+GPG_CMD='/usr/bin/gpg'	# gpg
+GREP_CMD='/bin/grep'	# grep
+PGREP_CMD='/usr/bin/pgrep'	# procps
+PINENTRY_CMD='/usr/bin/pinentry-gtk-2'	# pinentry-gtk2
+SED_CMD='/bin/sed'	# sed
+XRDB_CMD='/usr/bin/xrdb'	# x11-xserver-utils
+YAD_CMD='/usr/bin/yad'	# yad
+
+ALL_CMDS=(
+    ${BASENAME_CMD}
+    ${CAT_CMD}
+    ${CHOWN_CMD}
+    ${CUT_CMD}
+    ${DATE_CMD}
+    ${DIRNAME_CMD}
+    ${DD_CMD}
+    ${DF_CMD}
+    ${E2FSCK_CMD}
+    ${ECHO_CMD}
+    ${KILL_CMD}
+    ${LOSETUP_CMD}
+    ${LSBLK_CMD}
+    ${MKDIR_CMD}
+    ${MKFS_EXT2_CMD}
+    ${MKTEMP_CMD}
+    ${MODPROBE_CMD}
+    ${MOUNT_CMD}
+    ${MOUNTPOINT_CMD}
+    ${MV_CMD}
+    ${REALPATH_CMD}
+    ${RM_CMD}
+    ${SHA256SUM_CMD}
+    ${SLEEP_CMD}
+    ${SORT_CMD}
+    ${STAT_CMD}
+    ${SUDO_CMD}
+    ${TEE_CMD}
+    ${TR_CMD}
+    ${UMOUNT_CMD}
+    ${WC_CMD}
+    ${WHICH_CMD}
+    ${ASKPASS_CMD}
+    ${CRYPTSETUP_CMD}
+    ${FIND_CMD}
+    ${GPG_CMD}
+    ${GREP_CMD}
+    ${PGREP_CMD}
+    ${SED_CMD}
+    ${XRDB_CMD}
+    ${YAD_CMD}
+)
+
+check_required_commands() {
+    local status error command
+
+    for command in "${ALL_CMDS[@]}"; do
+        ${WHICH_CMD} "${command}" > /dev/null
+        status="$?"
+        if [ "${status}" != '0' ]; then
+            ${ECHO_CMD} "${command} is not available. Install the corresponding package in the system."
+            error=1
+        fi
+    done
+    if [ "${error}" = 1 ]; then
+        exit 1
+    fi
+}
+

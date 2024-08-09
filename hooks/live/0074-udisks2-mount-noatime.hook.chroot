@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -e
+
+# Edit
+if [ -e /etc/udisks2/mount_options.conf ]
+then
+    /bin/sed --in-place -e 's/^ *defaults=.*/defaults=noatime/' \
+        /etc/udisks2/mount_options.conf
+else
+    /bin/cat << END_OF_TEXT > /etc/udisks2/mount_options.conf
+# This file contains custom mount options for udisks 2.x
+# Typically placed at /etc/udisks2/mount_options.conf
+# Refer to http://storaged.org/doc/udisks2-api/latest/mount_options.html
+
+[defaults]
+# Always mount with the option noatime when mounting any filesystem on any
+# device with the user level udisks2 if the device is not listed in /etc/fstab.
+# This works when mounting from XFCE standard Thunar file manager.
+defaults=noatime
+
+END_OF_TEXT
+fi

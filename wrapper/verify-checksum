@@ -1,0 +1,217 @@
+#!/bin/bash
+# -*- mode: sh; coding: utf-8; -*-
+
+script_path=$(/usr/bin/realpath "$0")
+script_name=$(/usr/bin/basename "$0")
+script_dir=$(/usr/bin/dirname "${script_path}")
+source "${script_dir}/common-utils"
+
+# the directory where the live system image partition is mounted in the environment the live system has booted.
+LIVE_IMAGE_MOUNT='/run/live/medium'
+
+
+main() {
+    check_storage_mount "${WALLET_STORAGE_MOUNT_POINT}"
+    verify_encrypted_checksum
+}
+
+# Convention:
+# The encrypted checksum file is placed in the root directory of the wallet storage partition.
+# and its name is ${isofile}_sha256sum.gpg
+# The original checksum file is generated as binary/sha256sum.txt within the Debian Live build.
+
+verify_encrypted_checksum() {
+    local live_user="${USER}"
+
+    local checksum_name
+    find_encrypted_checksum_name checksum_name
+
+    local data_mount="/media/${live_user}/${WALLET_STORAGE_VOLUME_LABEL}"
+    local encrypted_checksum_path="${data_mount}/${checksum_name}"
+
+    local text1 text2 text3 text4 text5 text6 text7 text8 text9 text10
+
+    if [ ! -e "${encrypted_checksum_path}" ]; then
+        text1="<b><span foreground='red'>Error:\nCan't find the encrypted checksum file\n${encrypted_checksum_path}</span>"
+        text2="\nThis means either"
+        text3="\n - the encrypted checksum file was not installed when the Debian Live system image was installed, or"
+        text4="\n - the encrypted checksum file was deleted from ${data_mount} after the installation."
+        text5="\n<span foreground='red'>We can no longer verify authenticity of this Debian Live system.</span>"
+        text6="\n\n<span foreground='blue'>You are encouraged to"
+        text7="\n(1) stop using this Bitport system now,"
+        text8="\n(2) create a new Bitport system by following the Bitport installation guide, and"
+        text9="\n(3) restore the LUKS encrypted container file to the new system."
+        text10="\nThe LUKS encrypted container file in ${data_mount} should be safe if its passphrase was not compromised.</span></b>"
+        ${YAD_CMD} \
+            --image dialog-warning --window-icon dialog-warning \
+            --button 'OK:0' --no-escape \
+            --title "Serious Error" \
+            --text "${text1}${text2}${text3}${text4}${text5}${text6}${text7}${text8}${text9}${text10}" \
+            --borders=12 --fixed
+        exit 1
+    fi
+
+    local checksum_tmp=$(${MKTEMP_CMD} --tmpdir 'checksum.XXXXXXXXXX')
+    local status
+    decrypt_checksum_file "${encrypted_checksum_path}" "${checksum_tmp}" status
+    if [ "${status}" = '1' ]; then
+        echo aborted
+        exit 1
+    fi
+
+    verify_checksum "${checksum_tmp}"
+
+    ${RM_CMD} "${checksum_tmp}"
+}
+
+find_encrypted_checksum_name() {
+    declare -n checksum_name_ref="$1"
+
+    local cmdline
+    get_cmdline cmdline
+
+    local isopath
+    findiso "${cmdline}" isopath
+
+    local checksum
+    map_isofile_to_checksum "${isopath}" checksum
+    checksum_name_ref="${checksum}"
+}
+
+# get kernel boot parameters
+get_cmdline() {
+    declare -n cmdline_ref="$1"
+    cmdline_ref=$(${CAT_CMD} /proc/cmdline)
+}
+
+# pick up the ISO name from kernel boot parameters.
+# One of the parameters should be findiso=${isofile}.
+# A sample of /proc/cmdline:
+# BOOT_IMAGE=/live/vmlinuz-5.10.0-26-amd64 boot=live components quiet splash findiso=/isos/debian-live-bullseye-offline-amd64-hybrid-20231008.iso
+findiso() {
+    local cmdline="$1"
+    declare -n isopath_ref="$2"
+    local parameter='findiso'
+    isopath_ref=$(${ECHO_CMD} "${cmdline}" | ${SED_CMD} -r "s/.* *${parameter}=([^ ]+) *.*/\1/")
+}
+
+map_isofile_to_checksum() {
+    # encrypted checksum name convention:
+    # encrypted checksum file name = current Live system ISO-9660 file name + '_sha256sum.gpg'
+    local isopath="$1"
+    declare -n checksum_ref="$2"
+
+    local isofile
+    isofile=$(${BASENAME_CMD} "${isopath}")
+    # checksum file name = ${isofile}_sha256sum.gpg
+    checksum_ref="${isofile}_sha256sum.gpg"
+}
+
+
+decrypt_checksum_file() {
+    local encrypted_checksum_path="$1"
+    local decrypted_checksum_path="$2"
+    local -n status_ref="$3"
+
+    local text1="In the next dialog you will be asked by GPG to supply with the passphrase you used"
+    local text2="\nto encrypt the file ${encrypted_checksum_path}."
+    ${YAD_CMD} \
+        --image dialog-information --window-icon dialog-information \
+        --button 'OK:0' --no-escape \
+        --title "GPG decryption for encrypted checksum file" \
+        --text "${text1}${text2}" \
+        --borders=12 --fixed
+
+    status_ref="2"
+    local errfile=$(${MKTEMP_CMD})
+    local gpg_status
+    local gpg_output
+    local gpg_error
+    while [ "${status_ref}" = '2' ]; do
+        # let gpg write to stdout instead of letting it to write to the temporary file
+        # to avoid having it ask user for overwrite confirmation
+        gpg_output=$(${GPG_CMD} --decrypt --no-symkey-cache --output - "${encrypted_checksum_path}" 2> "${errfile}")
+        gpg_status="$?"
+        gpg_error=$(${CAT_CMD} "${errfile}")
+
+        if [ "${gpg_status}" != '0' ]; then
+            local yad_status
+            ${YAD_CMD} \
+                --image 'dialog-warning' \
+                --window-icon 'dialog-warning' \
+                --title 'GPG decrypt checksum file' \
+                --text "<b>Error:</b>\n${gpg_error}\n\n<b>Try entering the passphrase again?</b>\n" \
+                --button 'Cancel:1' --button 'OK:0' --no-escape \
+                --borders 12 --center --on-top --fixed
+            yad_status="$?"
+            if [ "${yad_status}" = 1 ]; then
+                status_ref='1'
+            else
+                status_ref='2'
+            fi
+        else
+            status_ref='0'
+            ${ECHO_CMD} -E "${gpg_output}" > "${decrypted_checksum_path}"
+        fi
+    done
+
+    ${RM_CMD} "${errfile}"
+}
+
+verify_checksum() {
+    local checksum_file="$1"
+
+    cd "${LIVE_IMAGE_MOUNT}"
+
+    local text1 text2 text3 text4 text5 text6
+    text1="<b>Verifying sha256sum of all files recorded in ${checksum_file}."
+    text2="\nWait until you see the line <span foreground='blue'>Finished sha256sum</span> below."
+    text3="\nIt might take a minute or so."
+    text4="\nIn case any file line doesn't show OK it means the file is not the same as the original."
+    text5="\nWhen <span foreground='blue'>Finished sha256sum</span> is shown as the last line then press Done.</b>"
+
+    coproc ${YAD_CMD} \
+           --text-info \
+           --text="${text1}${text2}${text3}${text4}${text5}" \
+           --button 'Done:0' --no-escape \
+           --title="sha256sum result" \
+           --width=600 --height=450 --borders=12
+
+    local sha_status
+    if [ "${#COPROC[@]}" = 2 ]; then
+        ${SHA256SUM_CMD} --check "${checksum_file}" >&${COPROC[1]} 2>&1
+        sha_status=$?
+        ${ECHO_CMD} -E "Finished sha256sum." >&${COPROC[1]}
+    fi
+
+    wait ${COPROC_PID}
+
+    if [ "${sha_status}" = 0 ]; then
+        text1='<b>sha256sum of all files matched the recorded values in the file'
+        text2="\n${encrypted_checksum_path}"
+        text3='\nand no discrepancy was found.</b>'
+        ${YAD_CMD} \
+            --image dialog-information --window-icon dialog-information \
+            --button 'OK:0' --no-escape \
+            --title "Success" \
+            --text "${text1}${text2}${text3}" \
+            --borders=12 --fixed
+    else
+        text1='<b><span foreground="red">sha256sum of some files does not match the recorded values in the file'
+        text2="\n${encrypted_checksum_path}"
+        text3='\nIt is probable that the Debian Live system was tampered.</span></b>'
+        text4='\n<b>You should stop using this live system now to avoid possible security risks!</b>'
+        text5='\n<b>The separate LUKS volume is resistant to tampering so it should be safe.</b>'
+        text6="\n<b>Don't forget to backup up the LUKS container file to multiple Bitport systems.</b>"
+        ${YAD_CMD} \
+            --image dialog-information --window-icon dialog-information \
+            --button 'OK:0' --no-escape \
+            --title "Serious Error" \
+            --text "${text1}${text2}${text3}${text4}${text5}${text6}" \
+            --borders=12 --fixed
+    fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main
+fi

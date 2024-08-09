@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Verify SHA256 checksum of the Debian live-build System
+GenericName=Bitport Utility
+Comment=Utility to verify SHA256 checksum of the Debian live-build system
+Icon=/usr/share/icons/Tango/32x32/apps/utilities-system-monitor.png
+Exec=/opt/electrum/wrapper/verify-checksum
+NoDisplay=false
+Categories=Finance;Network;
+MimeType=x-scheme-handler/bitcoin;
+StartupNotify=false
+Terminal=false
